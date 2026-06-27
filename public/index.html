@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MAZE TOWER</title>
+    <script type="module" crossorigin src="/assets/index-CmL4eG2D.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-D93U6ZmC.css">
+  </head>
+  <body>
+    <main id="game-root" aria-label="Maze Tower game">
+      <div id="canvas-host" aria-hidden="true"></div>
+
+      <section id="main-menu" class="overlay menu-panel">
+        <div class="menu-copy">
+          <p class="eyebrow">PS1 Maze Relic</p>
+          <h1>MAZE TOWER</h1>
+          <p class="menu-line">Reach the tower. Steal the light. Bring it home.</p>
+        </div>
+        <button id="play-button" class="primary-button" type="button">Play</button>
+      </section>
+
+      <section id="pause-menu" class="overlay menu-panel" hidden>
+        <div class="menu-copy">
+          <p class="eyebrow">Paused</p>
+          <h2>MAZE TOWER</h2>
+        </div>
+        <div class="button-stack">
+          <button id="resume-button" class="primary-button" type="button">Resume</button>
+          <button id="exit-button" class="secondary-button" type="button">Exit to Main Menu</button>
+        </div>
+      </section>
+
+      <section id="win-screen" class="overlay menu-panel" hidden>
+        <div class="menu-copy">
+          <p class="eyebrow">Orb Returned</p>
+          <h2>You Won</h2>
+          <p class="menu-line">The orb hums on the pedestal. The maze releases you.</p>
+        </div>
+        <div class="button-stack">
+          <button id="play-again-button" class="primary-button" type="button">Play Again</button>
+          <button id="win-menu-button" class="secondary-button" type="button">Main Menu</button>
+        </div>
+      </section>
+
+      <aside id="hud" class="hud" hidden>
+        <div class="objective-chip">
+          <span class="chip-label">Objective</span>
+          <span id="objective-text">Reach the tower at the center of the maze.</span>
+        </div>
+        <div id="orb-status" class="orb-status" data-active="false">NO ORB</div>
+      </aside>
+
+      <div id="interaction-prompt" class="interaction-prompt" hidden></div>
+      <div class="scanlines" aria-hidden="true"></div>
+    </main>
+
+  </body>
+</html>

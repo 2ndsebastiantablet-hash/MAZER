@@ -1,0 +1,15 @@
+# local environment
+.env*
+!.env.example
+.DS_Store
+Thumbs.db
+
+# dependencies / build output
+node_modules/
+dist/
+build/
+.vite/
+.wrangler/
+
+# local logs
+*.log
