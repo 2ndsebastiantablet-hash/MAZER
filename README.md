@@ -48,8 +48,11 @@ npm run build
 
 ## Deployment
 
-Build the static app and deploy the `public/` directory with any static host:
+Build the static app and deploy it with Wrangler static assets:
 
 ```sh
 npm run build
+npx wrangler deploy
 ```
+
+Cloudflare should use `/` as the project path. Wrangler reads `./dist` from `wrangler.jsonc`.

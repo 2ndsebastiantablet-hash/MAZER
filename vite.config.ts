@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   publicDir: false,
   build: {
-    outDir: "public",
+    outDir: "dist",
     emptyOutDir: true,
   },
   test: {

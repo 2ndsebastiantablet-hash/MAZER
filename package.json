@@ -9,7 +9,8 @@
     "dev": "vite --host 127.0.0.1",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "build": "npm run check && npm run test && vite build"
+    "build": "npm run check && npm run test && vite build",
+    "deploy": "npm run build && wrangler deploy"
   },
   "keywords": [
     "game",
@@ -25,6 +26,7 @@
     "@types/three": "^0.166.0",
     "typescript": "^5.5.4",
     "vite": "^8.1.0",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "wrangler": "^4.0.0"
   }
 }
