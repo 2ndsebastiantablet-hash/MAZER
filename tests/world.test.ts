@@ -2,6 +2,9 @@ import { describe, expect, test } from "vitest";
 import { generateMaze, seededRandom } from "../src/game/maze";
 import {
   CELL_SIZE,
+  PLAYER_RADIUS,
+  TOWER_OUTER_RADIUS,
+  TOWER_TOP_HEIGHT,
   cellToWorld,
   createMazeCollision,
   findNearestWalkableFloor,
@@ -47,5 +50,15 @@ describe("world grid mapping", () => {
     expect(safe).not.toBeNull();
     expect(collision.isWalkable(safe!.x, safe!.z, safe!.y)).toBe(true);
     expect(safe!.y).toBe(0);
+  });
+
+  test("matches tower collision to the visible door and top window openings", () => {
+    const maze = generateMaze({ size: 21, rng: seededRandom(9) });
+    const collision = createMazeCollision(maze);
+
+    expect(collision.isWalkable(0, TOWER_OUTER_RADIUS, 0, PLAYER_RADIUS)).toBe(true);
+    expect(collision.isWalkable(TOWER_OUTER_RADIUS, 0, 0, PLAYER_RADIUS)).toBe(false);
+    expect(collision.isWalkable(TOWER_OUTER_RADIUS, 0, TOWER_TOP_HEIGHT, PLAYER_RADIUS)).toBe(true);
+    expect(collision.isWalkable(0, -TOWER_OUTER_RADIUS, TOWER_TOP_HEIGHT, PLAYER_RADIUS)).toBe(false);
   });
 });

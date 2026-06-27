@@ -12,10 +12,18 @@ import {
   PLAYER_CROUCH_HEIGHT,
   PLAYER_RADIUS,
   PLAYER_STAND_HEIGHT,
+  TOWER_DOOR_CENTER_ANGLE,
+  TOWER_DOOR_HALF_ANGLE,
+  TOWER_DOOR_HALF_WIDTH,
+  TOWER_DOOR_HEIGHT,
   TOWER_INNER_RADIUS,
   TOWER_OUTER_RADIUS,
   TOWER_TOP_HEIGHT,
   TOWER_TOTAL_HEIGHT,
+  TOWER_WINDOW_CENTER_ANGLE,
+  TOWER_WINDOW_CEILING,
+  TOWER_WINDOW_FLOOR,
+  TOWER_WINDOW_HALF_ANGLE,
   WALL_HEIGHT,
   cellToWorld,
   createMazeCollision,
@@ -27,6 +35,13 @@ import {
 import { createRetroTextures, type RetroTextures } from "../render/textures";
 
 type GameMode = "main" | "playing" | "paused" | "won";
+
+type TowerOpening = {
+  centerAngle: number;
+  halfAngle: number;
+  minY: number;
+  maxY: number;
+};
 
 type PlayerState = {
   position: THREE.Vector3;
@@ -62,6 +77,8 @@ const CROUCH_SPEED = 3.5;
 const NOCLIP_SPEED = 12.5;
 const JUMP_SPEED = 6.4;
 const GRAVITY = -18;
+const TOWER_WALL_SEGMENTS = 20;
+const TOWER_WALL_THICKNESS = 0.72;
 
 export class MazerGame {
   private readonly ui: UiElements;
@@ -269,53 +286,57 @@ export class MazerGame {
 
     const towerMaterial = new THREE.MeshLambertMaterial({
       map: this.textures.tower,
-      side: THREE.DoubleSide,
       flatShading: true,
     });
-    const doorGapCenter = Math.PI / 2;
-    const doorGap = 0.3;
-    const segmentA = new THREE.Mesh(
-      new THREE.CylinderGeometry(
-        TOWER_OUTER_RADIUS,
-        TOWER_OUTER_RADIUS,
-        TOWER_TOTAL_HEIGHT,
-        12,
-        1,
-        true,
-        0,
-        doorGapCenter - doorGap,
-      ),
-      towerMaterial,
-    );
-    const segmentB = new THREE.Mesh(
-      new THREE.CylinderGeometry(
-        TOWER_OUTER_RADIUS,
-        TOWER_OUTER_RADIUS,
-        TOWER_TOTAL_HEIGHT,
-        12,
-        1,
-        true,
-        doorGapCenter + doorGap,
-        Math.PI * 2 - doorGapCenter - doorGap,
-      ),
-      towerMaterial,
-    );
+    const doorOpening: TowerOpening = {
+      centerAngle: TOWER_DOOR_CENTER_ANGLE,
+      halfAngle: TOWER_DOOR_HALF_ANGLE,
+      minY: 0,
+      maxY: TOWER_DOOR_HEIGHT,
+    };
+    const windowOpening: TowerOpening = {
+      centerAngle: TOWER_WINDOW_CENTER_ANGLE,
+      halfAngle: TOWER_WINDOW_HALF_ANGLE,
+      minY: TOWER_WINDOW_FLOOR,
+      maxY: TOWER_WINDOW_CEILING,
+    };
 
-    segmentA.position.y = TOWER_TOTAL_HEIGHT / 2;
-    segmentB.position.y = TOWER_TOTAL_HEIGHT / 2;
-    group.add(segmentA, segmentB);
+    this.addTowerWallBand(group, towerMaterial, TOWER_DOOR_HEIGHT / 2, TOWER_DOOR_HEIGHT, [doorOpening]);
+    this.addTowerWallBand(
+      group,
+      towerMaterial,
+      (TOWER_DOOR_HEIGHT + TOWER_WINDOW_FLOOR) / 2,
+      TOWER_WINDOW_FLOOR - TOWER_DOOR_HEIGHT,
+      [],
+    );
+    this.addTowerWallBand(
+      group,
+      towerMaterial,
+      (TOWER_WINDOW_FLOOR + TOWER_WINDOW_CEILING) / 2,
+      TOWER_WINDOW_CEILING - TOWER_WINDOW_FLOOR,
+      [windowOpening],
+    );
+    this.addTowerWallBand(
+      group,
+      towerMaterial,
+      (TOWER_WINDOW_CEILING + TOWER_TOTAL_HEIGHT) / 2,
+      TOWER_TOTAL_HEIGHT - TOWER_WINDOW_CEILING,
+      [],
+    );
 
     const frameMaterial = new THREE.MeshLambertMaterial({ map: this.textures.door });
-    const frameGeometry = new THREE.BoxGeometry(0.55, 4.2, 0.75);
+    const frameGeometry = new THREE.BoxGeometry(0.55, TOWER_DOOR_HEIGHT, 0.75);
     const leftFrame = new THREE.Mesh(frameGeometry, frameMaterial);
     const rightFrame = new THREE.Mesh(frameGeometry, frameMaterial);
-    leftFrame.position.set(-2.05, 2.1, TOWER_OUTER_RADIUS - 0.08);
-    rightFrame.position.set(2.05, 2.1, TOWER_OUTER_RADIUS - 0.08);
+    leftFrame.position.set(-TOWER_DOOR_HALF_WIDTH - 0.28, TOWER_DOOR_HEIGHT / 2, TOWER_OUTER_RADIUS - 0.08);
+    rightFrame.position.set(TOWER_DOOR_HALF_WIDTH + 0.28, TOWER_DOOR_HEIGHT / 2, TOWER_OUTER_RADIUS - 0.08);
     group.add(leftFrame, rightFrame);
 
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(4.65, 0.55, 0.75), frameMaterial);
-    lintel.position.set(0, 4.05, TOWER_OUTER_RADIUS - 0.08);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(TOWER_DOOR_HALF_WIDTH * 2 + 1.1, 0.55, 0.75), frameMaterial);
+    lintel.position.set(0, TOWER_DOOR_HEIGHT + 0.08, TOWER_OUTER_RADIUS - 0.08);
     group.add(lintel);
+
+    this.addTowerWindowFrame(group, frameMaterial);
 
     const topMaterial = new THREE.MeshLambertMaterial({ map: this.textures.stair, flatShading: true });
     const topPlatform = new THREE.Mesh(
@@ -353,6 +374,72 @@ export class MazerGame {
 
     steps.instanceMatrix.needsUpdate = true;
     group.add(steps);
+  }
+
+  private addTowerWallBand(
+    group: THREE.Group,
+    material: THREE.Material,
+    yCenter: number,
+    height: number,
+    openings: TowerOpening[],
+  ): void {
+    if (height <= 0) {
+      return;
+    }
+
+    const radius = TOWER_OUTER_RADIUS - TOWER_WALL_THICKNESS / 2;
+    const arcWidth = ((Math.PI * 2 * TOWER_OUTER_RADIUS) / TOWER_WALL_SEGMENTS) * 0.94;
+    const geometry = new THREE.BoxGeometry(arcWidth, height, TOWER_WALL_THICKNESS);
+    const walls = new THREE.InstancedMesh(geometry, material, TOWER_WALL_SEGMENTS);
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const quaternion = new THREE.Quaternion();
+    const scale = new THREE.Vector3(1, 1, 1);
+    const minY = yCenter - height / 2;
+    const maxY = yCenter + height / 2;
+    let visibleSegments = 0;
+
+    for (let index = 0; index < TOWER_WALL_SEGMENTS; index += 1) {
+      const angle = (index / TOWER_WALL_SEGMENTS) * Math.PI * 2;
+      const insideOpening = openings.some(
+        (opening) =>
+          rangesOverlap(minY, maxY, opening.minY, opening.maxY) &&
+          angleWithin(angle, opening.centerAngle, opening.halfAngle),
+      );
+
+      if (insideOpening) {
+        continue;
+      }
+
+      position.set(Math.cos(angle) * radius, yCenter, Math.sin(angle) * radius);
+      quaternion.setFromEuler(new THREE.Euler(0, Math.PI / 2 - angle, 0));
+      matrix.compose(position, quaternion, scale);
+      walls.setMatrixAt(visibleSegments, matrix);
+      visibleSegments += 1;
+    }
+
+    walls.count = visibleSegments;
+    walls.instanceMatrix.needsUpdate = true;
+    group.add(walls);
+  }
+
+  private addTowerWindowFrame(group: THREE.Group, material: THREE.Material): void {
+    const windowHeight = TOWER_WINDOW_CEILING - TOWER_WINDOW_FLOOR;
+    const windowWidth = Math.sin(TOWER_WINDOW_HALF_ANGLE) * TOWER_OUTER_RADIUS * 2;
+    const x = TOWER_OUTER_RADIUS - 0.08;
+    const y = (TOWER_WINDOW_FLOOR + TOWER_WINDOW_CEILING) / 2;
+    const postGeometry = new THREE.BoxGeometry(0.78, windowHeight, 0.42);
+    const lintelGeometry = new THREE.BoxGeometry(0.78, 0.46, windowWidth + 0.9);
+    const leftPost = new THREE.Mesh(postGeometry, material);
+    const rightPost = new THREE.Mesh(postGeometry, material);
+    const sill = new THREE.Mesh(lintelGeometry, material);
+    const lintel = new THREE.Mesh(lintelGeometry, material);
+
+    leftPost.position.set(x, y, -windowWidth / 2 - 0.22);
+    rightPost.position.set(x, y, windowWidth / 2 + 0.22);
+    sill.position.set(x, TOWER_WINDOW_FLOOR - 0.12, 0);
+    lintel.position.set(x, TOWER_WINDOW_CEILING + 0.12, 0);
+    group.add(leftPost, rightPost, sill, lintel);
   }
 
   private addPedestal(group: THREE.Group): void {
@@ -927,4 +1014,13 @@ function getButton(id: string): HTMLButtonElement {
   }
 
   return element;
+}
+
+function rangesOverlap(aMin: number, aMax: number, bMin: number, bMax: number): boolean {
+  return aMin < bMax && bMin < aMax;
+}
+
+function angleWithin(angle: number, center: number, halfWidth: number): boolean {
+  const delta = Math.atan2(Math.sin(angle - center), Math.cos(angle - center));
+  return Math.abs(delta) <= halfWidth;
 }

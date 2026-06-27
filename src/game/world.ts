@@ -11,6 +11,14 @@ export const TOWER_INNER_RADIUS = 6.35;
 export const TOWER_TOP_HEIGHT = 23;
 export const TOWER_TOTAL_HEIGHT = 29;
 export const STAIR_RADIUS = 5.05;
+export const TOWER_DOOR_HALF_WIDTH = 2.55;
+export const TOWER_DOOR_HEIGHT = 4.6;
+export const TOWER_DOOR_CENTER_ANGLE = Math.PI / 2;
+export const TOWER_DOOR_HALF_ANGLE = 0.36;
+export const TOWER_WINDOW_CENTER_ANGLE = 0;
+export const TOWER_WINDOW_HALF_ANGLE = 0.42;
+export const TOWER_WINDOW_FLOOR = TOWER_TOP_HEIGHT - 0.35;
+export const TOWER_WINDOW_CEILING = TOWER_TOP_HEIGHT + 4.45;
 
 export type WorldPoint = {
   x: number;
@@ -41,7 +49,6 @@ export type MazeCollision = {
 const STAIR_COUNT = 86;
 const STAIR_TURNS = 1.7;
 const STAIR_STEP_THICKNESS = 0.32;
-const DOOR_HALF_WIDTH = 1.75;
 
 export function cellToWorld(maze: Maze, cell: MazeCell): WorldPoint {
   const center = Math.floor(maze.size / 2);
@@ -161,7 +168,29 @@ export function isInsideTowerInterior(x: number, z: number): boolean {
 
 export function isNearTowerDoor(x: number, z: number): boolean {
   const distance = Math.hypot(x, z);
-  return Math.abs(x) < DOOR_HALF_WIDTH && z > 0 && distance < TOWER_OUTER_RADIUS + 0.65;
+  return Math.abs(x) < TOWER_DOOR_HALF_WIDTH && z > 0 && distance < TOWER_OUTER_RADIUS + 0.65;
+}
+
+export function isInTowerDoorOpening(x: number, z: number, currentY: number): boolean {
+  const distance = Math.hypot(x, z);
+  return (
+    currentY <= TOWER_DOOR_HEIGHT + 0.4 &&
+    Math.abs(x) < TOWER_DOOR_HALF_WIDTH &&
+    z > 0 &&
+    distance < TOWER_OUTER_RADIUS + PLAYER_RADIUS + 0.15
+  );
+}
+
+export function isInTowerWindowOpening(x: number, z: number, currentY: number): boolean {
+  const distance = Math.hypot(x, z);
+  const angle = Math.atan2(z, x);
+
+  return (
+    currentY >= TOWER_WINDOW_FLOOR - 0.65 &&
+    currentY <= TOWER_WINDOW_CEILING + 0.35 &&
+    distance < TOWER_OUTER_RADIUS + PLAYER_RADIUS + 0.15 &&
+    isAngleWithin(angle, TOWER_WINDOW_CENTER_ANGLE, TOWER_WINDOW_HALF_ANGLE)
+  );
 }
 
 export function isOnTowerTop(x: number, z: number, currentY: number): boolean {
@@ -182,13 +211,22 @@ export function isPointOnStep(x: number, z: number, step: StairStep): boolean {
 function isWalkablePoint(maze: Maze, x: number, z: number, currentY: number): boolean {
   const distanceFromTower = Math.hypot(x, z);
   if (distanceFromTower < TOWER_OUTER_RADIUS + PLAYER_RADIUS) {
-    if (isNearTowerDoor(x, z) || distanceFromTower < TOWER_INNER_RADIUS - PLAYER_RADIUS) {
+    if (
+      distanceFromTower < TOWER_INNER_RADIUS - PLAYER_RADIUS ||
+      isInTowerDoorOpening(x, z, currentY) ||
+      isInTowerWindowOpening(x, z, currentY)
+    ) {
       return true;
     }
 
-    return currentY > TOWER_TOTAL_HEIGHT - 1.5;
+    return false;
   }
 
   const cell = worldToCell(maze, x, z);
   return isOpenCell(maze, cell);
+}
+
+function isAngleWithin(angle: number, center: number, halfWidth: number): boolean {
+  const delta = Math.atan2(Math.sin(angle - center), Math.cos(angle - center));
+  return Math.abs(delta) <= halfWidth;
 }
