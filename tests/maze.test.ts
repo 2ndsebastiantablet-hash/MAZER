@@ -3,6 +3,7 @@ import {
   cellKey,
   findPath,
   generateMaze,
+  getOpenNeighbors,
   seededRandom,
 } from "../src/game/maze";
 
@@ -36,4 +37,55 @@ describe("maze generation", () => {
 
     expect([...first.openCells].sort()).not.toEqual([...second.openCells].sort());
   });
+
+  test("default maze is expansive with intersections, dead ends, and loops", () => {
+    const maze = generateMaze({ rng: seededRandom(2026) });
+    const stats = measureMaze(maze);
+    const path = findPath(maze, maze.spawnCell, maze.towerCell);
+
+    expect(maze.size).toBeGreaterThanOrEqual(41);
+    expect(path.length).toBeGreaterThanOrEqual(maze.size);
+    expect(stats.intersections).toBeGreaterThanOrEqual(80);
+    expect(stats.deadEnds).toBeGreaterThanOrEqual(70);
+    expect(stats.loopEdges).toBeGreaterThanOrEqual(35);
+  });
+
+  test("large mazes remain solvable and branch-rich across seeds", () => {
+    for (let seed = 30; seed < 40; seed += 1) {
+      const maze = generateMaze({ size: 45, rng: seededRandom(seed) });
+      const path = findPath(maze, maze.spawnCell, maze.towerCell);
+      const stats = measureMaze(maze);
+
+      expect(path.length).toBeGreaterThanOrEqual(Math.floor(maze.size * 0.7));
+      expect(stats.intersections).toBeGreaterThanOrEqual(75);
+      expect(stats.deadEnds).toBeGreaterThanOrEqual(65);
+      expect(stats.loopEdges).toBeGreaterThanOrEqual(30);
+    }
+  });
 });
+
+function measureMaze(maze: ReturnType<typeof generateMaze>) {
+  let deadEnds = 0;
+  let intersections = 0;
+  let edgeCount = 0;
+
+  for (const key of maze.openCells) {
+    const [x, y] = key.split(",").map(Number);
+    const degree = getOpenNeighbors(maze, { x, y }).length;
+    edgeCount += degree;
+
+    if (degree === 1) {
+      deadEnds += 1;
+    }
+
+    if (degree >= 3) {
+      intersections += 1;
+    }
+  }
+
+  return {
+    deadEnds,
+    intersections,
+    loopEdges: edgeCount / 2 - maze.openCells.size + 1,
+  };
+}

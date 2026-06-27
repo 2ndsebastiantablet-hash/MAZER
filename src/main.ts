@@ -1,4 +1,4 @@
 import "./styles.css";
-import { MazeTowerGame } from "./runtime/MazeTowerGame";
+import { MazerGame } from "./runtime/MazerGame";
 
-new MazeTowerGame();
+new MazerGame();

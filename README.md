@@ -19,6 +19,7 @@ Then open the Vite URL shown in the terminal. The game runs at `/`.
 - Mouse - look
 - `Space` - jump
 - `Tab` - toggle crouch
+- `F` - toggle fly/noclip mode
 - `Escape` - pause or resume
 - `E` or left click - interact
 
@@ -38,7 +39,7 @@ npm run build
 
 - `index.html` - root game shell
 - `src/main.ts` - application entry point
-- `src/runtime/MazeTowerGame.ts` - Three.js scene, controls, collision response, UI state, and gameplay loop
+- `src/runtime/MazerGame.ts` - Three.js scene, controls, collision response, UI state, and gameplay loop
 - `src/game/maze.ts` - random maze generation and pathfinding
 - `src/game/world.ts` - grid/world coordinate mapping, tower geometry constants, stair collision, and walkability checks
 - `src/game/progression.ts` - objective, orb, pedestal, and win-state progression

@@ -17,6 +17,10 @@ export type WorldPoint = {
   z: number;
 };
 
+export type SafeFloorPoint = WorldPoint & {
+  y: number;
+};
+
 export type StairStep = {
   angle: number;
   top: number;
@@ -55,6 +59,42 @@ export function worldToCell(maze: Maze, x: number, z: number): MazeCell {
     x: Math.round(x / CELL_SIZE + center),
     y: Math.round(z / CELL_SIZE + center),
   };
+}
+
+export function findNearestWalkableFloor(maze: Maze, x: number, z: number): SafeFloorPoint | null {
+  const start = worldToCell(maze, x, z);
+  const visited = new Set<string>();
+  const queue: MazeCell[] = [start];
+
+  while (queue.length > 0) {
+    const cell = queue.shift();
+    if (!cell) {
+      break;
+    }
+
+    const key = `${cell.x},${cell.y}`;
+    if (visited.has(key)) {
+      continue;
+    }
+
+    visited.add(key);
+
+    if (cell.x >= 0 && cell.y >= 0 && cell.x < maze.size && cell.y < maze.size) {
+      if (isOpenCell(maze, cell)) {
+        const world = cellToWorld(maze, cell);
+        return { x: world.x, y: 0, z: world.z };
+      }
+    }
+
+    queue.push(
+      { x: cell.x + 1, y: cell.y },
+      { x: cell.x - 1, y: cell.y },
+      { x: cell.x, y: cell.y + 1 },
+      { x: cell.x, y: cell.y - 1 },
+    );
+  }
+
+  return null;
 }
 
 export function createMazeCollision(maze: Maze): MazeCollision {

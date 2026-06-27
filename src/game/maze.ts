@@ -15,7 +15,8 @@ export type MazeOptions = {
   rng?: () => number;
 };
 
-const DEFAULT_SIZE = 25;
+const DEFAULT_SIZE = 49;
+const EXTRA_LOOP_RATE = 0.18;
 
 export function seededRandom(seed: number): () => number {
   let state = seed >>> 0;
@@ -47,42 +48,23 @@ export function generateMaze(options: MazeOptions = {}): Maze {
   carve(startCell, openCells);
   visited.add(cellKey(startCell));
 
-  const stack = [startCell];
-  while (stack.length > 0) {
-    const current = stack.at(-1);
-    if (!current) {
-      break;
-    }
-
-    const candidates = shuffle(
-      [
-        { x: current.x + 2, y: current.y },
-        { x: current.x - 2, y: current.y },
-        { x: current.x, y: current.y + 2 },
-        { x: current.x, y: current.y - 2 },
-      ].filter((cell) => isInsideCarveArea(cell, size) && !visited.has(cellKey(cell))),
-      rng,
-    );
-
-    if (candidates.length === 0) {
-      stack.pop();
+  const frontier = createFrontier(startCell, size, visited);
+  while (frontier.length > 0) {
+    const index = Math.floor(rng() * frontier.length);
+    const edge = frontier.splice(index, 1)[0];
+    if (!edge || visited.has(cellKey(edge.to))) {
       continue;
     }
 
-    const next = candidates[0];
-    const midpoint = {
-      x: current.x + Math.sign(next.x - current.x),
-      y: current.y + Math.sign(next.y - current.y),
-    };
-
-    carve(midpoint, openCells);
-    carve(next, openCells);
-    visited.add(cellKey(next));
-    stack.push(next);
+    carve(edge.wall, openCells);
+    carve(edge.to, openCells);
+    visited.add(cellKey(edge.to));
+    frontier.push(...createFrontier(edge.to, size, visited));
   }
 
   carve(spawnCell, openCells);
   carve(startCell, openCells);
+  carveExtraConnections(size, openCells, rng);
   carveTowerPlaza(towerCell, size, openCells);
   connectTowerToMaze(towerCell, openCells);
 
@@ -159,6 +141,51 @@ function randomOddBetween(min: number, max: number, rng: () => number): number {
 
 function isInsideCarveArea(cell: MazeCell, size: number): boolean {
   return cell.x > 0 && cell.y > 0 && cell.x < size - 1 && cell.y < size - 1;
+}
+
+type FrontierEdge = {
+  to: MazeCell;
+  wall: MazeCell;
+};
+
+function createFrontier(cell: MazeCell, size: number, visited: Set<string>): FrontierEdge[] {
+  return [
+    { to: { x: cell.x + 2, y: cell.y }, wall: { x: cell.x + 1, y: cell.y } },
+    { to: { x: cell.x - 2, y: cell.y }, wall: { x: cell.x - 1, y: cell.y } },
+    { to: { x: cell.x, y: cell.y + 2 }, wall: { x: cell.x, y: cell.y + 1 } },
+    { to: { x: cell.x, y: cell.y - 2 }, wall: { x: cell.x, y: cell.y - 1 } },
+  ].filter((edge) => isInsideCarveArea(edge.to, size) && !visited.has(cellKey(edge.to)));
+}
+
+function carveExtraConnections(size: number, openCells: Set<string>, rng: () => number): void {
+  const candidates: MazeCell[] = [];
+
+  for (let y = 1; y < size - 1; y += 1) {
+    for (let x = 1; x < size - 1; x += 1) {
+      const cell = { x, y };
+      if (openCells.has(cellKey(cell))) {
+        continue;
+      }
+
+      const eastWestOpen =
+        openCells.has(cellKey({ x: x - 1, y })) && openCells.has(cellKey({ x: x + 1, y }));
+      const northSouthOpen =
+        openCells.has(cellKey({ x, y: y - 1 })) && openCells.has(cellKey({ x, y: y + 1 }));
+
+      if (eastWestOpen || northSouthOpen) {
+        candidates.push(cell);
+      }
+    }
+  }
+
+  const shuffled = shuffle(candidates, rng);
+  const connectionCount = Math.floor(shuffled.length * EXTRA_LOOP_RATE);
+  for (let index = 0; index < connectionCount; index += 1) {
+    const cell = shuffled[index];
+    if (cell) {
+      carve(cell, openCells);
+    }
+  }
 }
 
 function carve(cell: MazeCell, openCells: Set<string>): void {

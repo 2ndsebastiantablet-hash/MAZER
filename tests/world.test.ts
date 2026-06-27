@@ -4,6 +4,7 @@ import {
   CELL_SIZE,
   cellToWorld,
   createMazeCollision,
+  findNearestWalkableFloor,
   worldToCell,
 } from "../src/game/world";
 
@@ -35,5 +36,16 @@ describe("world grid mapping", () => {
 
     expect(collision.isWalkable(open.x, open.z, 0)).toBe(true);
     expect(collision.isWalkable(wall.x, wall.z, 0)).toBe(false);
+  });
+
+  test("finds a nearby safe floor when exiting noclip inside a wall", () => {
+    const maze = generateMaze({ size: 21, rng: seededRandom(8) });
+    const wall = cellToWorld(maze, { x: 0, y: 0 });
+    const safe = findNearestWalkableFloor(maze, wall.x, wall.z);
+    const collision = createMazeCollision(maze);
+
+    expect(safe).not.toBeNull();
+    expect(collision.isWalkable(safe!.x, safe!.z, safe!.y)).toBe(true);
+    expect(safe!.y).toBe(0);
   });
 });

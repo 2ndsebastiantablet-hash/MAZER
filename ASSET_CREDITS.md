@@ -1,6 +1,6 @@
 # Asset Credits
 
-MAZE TOWER does not use downloaded image, model, audio, or texture assets.
+MAZER does not use downloaded image, model, audio, or texture assets.
 
 All current textures are procedural canvas textures generated at runtime in `src/render/textures.ts`:
 

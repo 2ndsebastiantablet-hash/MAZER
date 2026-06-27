@@ -19,6 +19,7 @@ import {
   WALL_HEIGHT,
   cellToWorld,
   createMazeCollision,
+  findNearestWalkableFloor,
   isInsideTowerInterior,
   isNearTowerDoor,
   type MazeCollision,
@@ -44,6 +45,7 @@ type UiElements = {
   hud: HTMLElement;
   objective: HTMLElement;
   orbStatus: HTMLElement;
+  noclipStatus: HTMLElement;
   prompt: HTMLElement;
   playButton: HTMLButtonElement;
   resumeButton: HTMLButtonElement;
@@ -52,15 +54,16 @@ type UiElements = {
   playAgainButton: HTMLButtonElement;
 };
 
-const MAZE_SIZE = 27;
+const MAZE_SIZE = 49;
 const RENDER_SCALE = 0.55;
 const LOOK_SPEED = 0.0021;
 const WALK_SPEED = 7.4;
 const CROUCH_SPEED = 3.5;
+const NOCLIP_SPEED = 12.5;
 const JUMP_SPEED = 6.4;
 const GRAVITY = -18;
 
-export class MazeTowerGame {
+export class MazerGame {
   private readonly ui: UiElements;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -87,6 +90,9 @@ export class MazeTowerGame {
   private orbLight: THREE.PointLight | null = null;
   private carriedOrb: THREE.Group;
   private pedestalPosition = new THREE.Vector3();
+  private noclipEnabled = false;
+  private noclipWarning = "";
+  private noclipWarningUntil = 0;
 
   constructor() {
     this.ui = getUiElements();
@@ -111,7 +117,7 @@ export class MazeTowerGame {
 
   private configureScene(): void {
     this.scene.background = new THREE.Color(0x111923);
-    this.scene.fog = new THREE.FogExp2(0x111923, 0.018);
+    this.scene.fog = new THREE.FogExp2(0x111923, 0.011);
 
     const ambient = new THREE.AmbientLight(0xa7a09a, 1.35);
     const sun = new THREE.DirectionalLight(0xffe0a8, 1.25);
@@ -145,6 +151,9 @@ export class MazeTowerGame {
     this.player.yaw = 0;
     this.player.crouched = false;
     this.player.grounded = true;
+    this.noclipEnabled = false;
+    this.noclipWarning = "";
+    this.noclipWarningUntil = 0;
     this.keys.clear();
     this.jumpRequested = false;
 
@@ -171,12 +180,13 @@ export class MazeTowerGame {
     this.clearWorld();
 
     const group = new THREE.Group();
-    group.name = "maze-tower-world";
+    group.name = "mazer-world";
     this.worldGroup = group;
     this.scene.add(group);
 
     this.addGround(group);
     this.addMazeWalls(group);
+    this.addSpawnBoundaryWalls(group);
     this.addTower(group);
     this.addPedestal(group);
     this.addOrb(group);
@@ -227,6 +237,29 @@ export class MazeTowerGame {
 
     walls.instanceMatrix.needsUpdate = true;
     group.add(walls);
+  }
+
+  private addSpawnBoundaryWalls(group: THREE.Group): void {
+    if (!this.maze) {
+      return;
+    }
+
+    const geometry = new THREE.BoxGeometry(CELL_SIZE, WALL_HEIGHT, CELL_SIZE);
+    const material = new THREE.MeshLambertMaterial({
+      map: this.textures.wall,
+      flatShading: true,
+    });
+    const boundary = new THREE.InstancedMesh(geometry, material, this.maze.size);
+    const matrix = new THREE.Matrix4();
+
+    for (let x = 0; x < this.maze.size; x += 1) {
+      const world = cellToWorld(this.maze, { x, y: this.maze.size });
+      matrix.makeTranslation(world.x, WALL_HEIGHT / 2, world.z);
+      boundary.setMatrixAt(x, matrix);
+    }
+
+    boundary.instanceMatrix.needsUpdate = true;
+    group.add(boundary);
   }
 
   private addTower(group: THREE.Group): void {
@@ -418,6 +451,11 @@ export class MazeTowerGame {
       return;
     }
 
+    if (this.noclipEnabled) {
+      this.updateNoclipPlayer(dt);
+      return;
+    }
+
     const moveX = (this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("KeyA") ? 1 : 0);
     const moveZ = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);
     const length = Math.hypot(moveX, moveZ);
@@ -472,6 +510,36 @@ export class MazeTowerGame {
     if (this.player.position.y < -12) {
       this.resetToSpawn();
     }
+  }
+
+  private updateNoclipPlayer(dt: number): void {
+    const moveX = (this.keys.has("KeyD") ? 1 : 0) - (this.keys.has("KeyA") ? 1 : 0);
+    const moveZ = (this.keys.has("KeyW") ? 1 : 0) - (this.keys.has("KeyS") ? 1 : 0);
+    const moveY =
+      (this.keys.has("Space") ? 1 : 0) -
+      (this.keys.has("ControlLeft") || this.keys.has("ControlRight") || this.keys.has("KeyC") ? 1 : 0);
+    const horizontalLength = Math.hypot(moveX, moveZ);
+
+    if (horizontalLength > 0) {
+      const forwardX = -Math.sin(this.player.yaw);
+      const forwardZ = -Math.cos(this.player.yaw);
+      const rightX = Math.cos(this.player.yaw);
+      const rightZ = -Math.sin(this.player.yaw);
+      const normalizedX = moveX / horizontalLength;
+      const normalizedZ = moveZ / horizontalLength;
+
+      this.player.position.x +=
+        (rightX * normalizedX + forwardX * normalizedZ) * NOCLIP_SPEED * dt;
+      this.player.position.z +=
+        (rightZ * normalizedX + forwardZ * normalizedZ) * NOCLIP_SPEED * dt;
+    }
+
+    if (moveY !== 0) {
+      this.player.position.y += moveY * NOCLIP_SPEED * dt;
+    }
+
+    this.player.velocityY = 0;
+    this.player.grounded = false;
   }
 
   private tryMove(dx: number, dz: number): void {
@@ -594,6 +662,11 @@ export class MazeTowerGame {
     this.ui.objective.textContent = this.progression.objective;
     this.ui.orbStatus.textContent = this.progression.hasOrb ? "ORB HELD" : "NO ORB";
     this.ui.orbStatus.dataset.active = String(this.progression.hasOrb);
+    this.ui.noclipStatus.hidden = !this.noclipEnabled;
+    this.ui.noclipStatus.textContent =
+      this.noclipWarning && this.clock.elapsedTime < this.noclipWarningUntil
+        ? this.noclipWarning
+        : "NOCLIP ON";
     this.ui.prompt.textContent = this.getPromptText();
     this.ui.prompt.hidden = this.ui.prompt.textContent.length === 0;
   }
@@ -673,8 +746,20 @@ export class MazeTowerGame {
       return;
     }
 
+    if (event.code === "KeyF") {
+      if (event.repeat) {
+        return;
+      }
+      this.toggleNoclip();
+      return;
+    }
+
     if (event.code === "Space") {
       event.preventDefault();
+      if (this.noclipEnabled) {
+        this.keys.add(event.code);
+        return;
+      }
       this.jumpRequested = true;
       return;
     }
@@ -689,6 +774,51 @@ export class MazeTowerGame {
 
   private handleKeyUp(event: KeyboardEvent): void {
     this.keys.delete(event.code);
+  }
+
+  private toggleNoclip(): void {
+    if (!this.maze || !this.collision) {
+      return;
+    }
+
+    if (!this.noclipEnabled) {
+      this.noclipEnabled = true;
+      this.noclipWarning = "";
+      this.player.velocityY = 0;
+      this.player.grounded = false;
+      return;
+    }
+
+    if (this.collision.isWalkable(this.player.position.x, this.player.position.z, this.player.position.y, PLAYER_RADIUS)) {
+      this.landAtCurrentPosition();
+      this.noclipEnabled = false;
+      return;
+    }
+
+    const safe = findNearestWalkableFloor(this.maze, this.player.position.x, this.player.position.z);
+    if (!safe) {
+      this.noclipWarning = "NO SAFE FLOOR";
+      this.noclipWarningUntil = this.clock.elapsedTime + 2.5;
+      return;
+    }
+
+    this.player.position.set(safe.x, safe.y, safe.z);
+    this.landAtCurrentPosition();
+    this.noclipEnabled = false;
+  }
+
+  private landAtCurrentPosition(): void {
+    if (!this.collision) {
+      return;
+    }
+
+    this.player.position.y = this.collision.getGroundHeight(
+      this.player.position.x,
+      this.player.position.z,
+      this.player.position.y,
+    );
+    this.player.velocityY = 0;
+    this.player.grounded = true;
   }
 
   private pauseGame(exitPointerLock: boolean): void {
@@ -721,6 +851,8 @@ export class MazeTowerGame {
     this.mode = "main";
     this.progression = createProgression();
     this.carriedOrb.visible = false;
+    this.noclipEnabled = false;
+    this.noclipWarning = "";
     this.ui.mainMenu.hidden = false;
     this.ui.pauseMenu.hidden = true;
     this.ui.winScreen.hidden = true;
@@ -735,6 +867,7 @@ export class MazeTowerGame {
 
   private showWinScreen(): void {
     this.mode = "won";
+    this.noclipEnabled = false;
     this.ui.hud.hidden = true;
     this.ui.winScreen.hidden = false;
     this.keys.clear();
@@ -768,6 +901,7 @@ function getUiElements(): UiElements {
     hud: getElement("hud"),
     objective: getElement("objective-text"),
     orbStatus: getElement("orb-status"),
+    noclipStatus: getElement("noclip-status"),
     prompt: getElement("interaction-prompt"),
     playButton: getButton("play-button"),
     resumeButton: getButton("resume-button"),

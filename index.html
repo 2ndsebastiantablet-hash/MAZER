@@ -3,16 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MAZE TOWER</title>
+    <title>MAZER</title>
   </head>
   <body>
-    <main id="game-root" aria-label="Maze Tower game">
+    <main id="game-root" aria-label="MAZER game">
       <div id="canvas-host" aria-hidden="true"></div>
 
       <section id="main-menu" class="overlay menu-panel">
         <div class="menu-copy">
           <p class="eyebrow">PS1 Maze Relic</p>
-          <h1>MAZE TOWER</h1>
+          <h1>MAZER</h1>
           <p class="menu-line">Reach the tower. Steal the light. Bring it home.</p>
         </div>
         <button id="play-button" class="primary-button" type="button">Play</button>
@@ -21,7 +21,7 @@
       <section id="pause-menu" class="overlay menu-panel" hidden>
         <div class="menu-copy">
           <p class="eyebrow">Paused</p>
-          <h2>MAZE TOWER</h2>
+          <h2>MAZER</h2>
         </div>
         <div class="button-stack">
           <button id="resume-button" class="primary-button" type="button">Resume</button>
@@ -47,6 +47,7 @@
           <span id="objective-text">Reach the tower at the center of the maze.</span>
         </div>
         <div id="orb-status" class="orb-status" data-active="false">NO ORB</div>
+        <div id="noclip-status" class="noclip-status" hidden>NOCLIP ON</div>
       </aside>
 
       <div id="interaction-prompt" class="interaction-prompt" hidden></div>
