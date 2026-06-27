@@ -3,11 +3,16 @@ import { generateMaze, seededRandom } from "../src/game/maze";
 import {
   CELL_SIZE,
   PLAYER_RADIUS,
+  TOWER_DOOR_HEIGHT,
   TOWER_OUTER_RADIUS,
   TOWER_TOP_HEIGHT,
+  TOWER_WINDOW_CEILING,
+  TOWER_WINDOW_FLOOR,
   cellToWorld,
   createMazeCollision,
+  createTowerWallPanels,
   findNearestWalkableFloor,
+  isPointInsideTowerWallPanel,
   worldToCell,
 } from "../src/game/world";
 
@@ -60,5 +65,37 @@ describe("world grid mapping", () => {
     expect(collision.isWalkable(TOWER_OUTER_RADIUS, 0, 0, PLAYER_RADIUS)).toBe(false);
     expect(collision.isWalkable(TOWER_OUTER_RADIUS, 0, TOWER_TOP_HEIGHT, PLAYER_RADIUS)).toBe(true);
     expect(collision.isWalkable(0, -TOWER_OUTER_RADIUS, TOWER_TOP_HEIGHT, PLAYER_RADIUS)).toBe(false);
+  });
+
+  test("builds tower collision from visible wall panels with real doorway and window gaps", () => {
+    const panels = createTowerWallPanels();
+
+    expect(panels.length).toBeGreaterThan(0);
+    expect(panels.some((panel) => isPointInsideTowerWallPanel(panel, 0, TOWER_OUTER_RADIUS, 1))).toBe(false);
+    expect(panels.some((panel) => isPointInsideTowerWallPanel(panel, 0, TOWER_OUTER_RADIUS, TOWER_DOOR_HEIGHT + 1))).toBe(true);
+    expect(panels.some((panel) => isPointInsideTowerWallPanel(panel, TOWER_OUTER_RADIUS, 0, 1))).toBe(true);
+    expect(
+      panels.some((panel) =>
+        isPointInsideTowerWallPanel(panel, TOWER_OUTER_RADIUS, 0, (TOWER_WINDOW_FLOOR + TOWER_WINDOW_CEILING) / 2),
+      ),
+    ).toBe(false);
+    expect(panels.some((panel) => isPointInsideTowerWallPanel(panel, 0, -TOWER_OUTER_RADIUS, TOWER_TOP_HEIGHT))).toBe(
+      true,
+    );
+  });
+
+  test("supports every stair step when climbing up or walking back down", () => {
+    const maze = generateMaze({ size: 21, rng: seededRandom(10) });
+    const collision = createMazeCollision(maze);
+    const ascending = collision.stairs;
+    const descending = [...collision.stairs].reverse();
+
+    for (const step of [...ascending, ...descending]) {
+      expect(collision.isWalkable(step.x, step.z, step.top, PLAYER_RADIUS)).toBe(true);
+      const ground = collision.getGroundHeight(step.x, step.z, step.top + 0.35);
+
+      expect(ground).toBeGreaterThanOrEqual(step.top - 0.001);
+      expect(ground).toBeLessThanOrEqual(TOWER_TOP_HEIGHT);
+    }
   });
 });

@@ -11,12 +11,15 @@ export const TOWER_INNER_RADIUS = 6.35;
 export const TOWER_TOP_HEIGHT = 23;
 export const TOWER_TOTAL_HEIGHT = 29;
 export const STAIR_RADIUS = 5.05;
-export const TOWER_DOOR_HALF_WIDTH = 2.55;
+export const TOWER_WALL_SIDES = 12;
+export const TOWER_WALL_THICKNESS = 0.82;
+export const TOWER_DOOR_HALF_WIDTH = 1.45;
 export const TOWER_DOOR_HEIGHT = 4.6;
 export const TOWER_DOOR_CENTER_ANGLE = Math.PI / 2;
-export const TOWER_DOOR_HALF_ANGLE = 0.36;
+export const TOWER_DOOR_HALF_ANGLE = 0.19;
 export const TOWER_WINDOW_CENTER_ANGLE = 0;
-export const TOWER_WINDOW_HALF_ANGLE = 0.42;
+export const TOWER_WINDOW_HALF_WIDTH = 1.75;
+export const TOWER_WINDOW_HALF_ANGLE = 0.25;
 export const TOWER_WINDOW_FLOOR = TOWER_TOP_HEIGHT - 0.35;
 export const TOWER_WINDOW_CEILING = TOWER_TOP_HEIGHT + 4.45;
 
@@ -40,10 +43,25 @@ export type StairStep = {
   thickness: number;
 };
 
+export type TowerWallPanel = {
+  id: string;
+  angle: number;
+  x: number;
+  z: number;
+  y: number;
+  yaw: number;
+  width: number;
+  height: number;
+  depth: number;
+  minY: number;
+  maxY: number;
+};
+
 export type MazeCollision = {
   isWalkable: (x: number, z: number, currentY?: number, radius?: number) => boolean;
   getGroundHeight: (x: number, z: number, currentY: number) => number;
   stairs: StairStep[];
+  towerWallPanels: TowerWallPanel[];
 };
 
 const STAIR_COUNT = 86;
@@ -106,9 +124,11 @@ export function findNearestWalkableFloor(maze: Maze, x: number, z: number): Safe
 
 export function createMazeCollision(maze: Maze): MazeCollision {
   const stairs = createSpiralStairs();
+  const towerWallPanels = createTowerWallPanels();
 
   return {
     stairs,
+    towerWallPanels,
     isWalkable(x, z, currentY = 0, radius = 0) {
       const samples = [
         { x, z },
@@ -118,7 +138,7 @@ export function createMazeCollision(maze: Maze): MazeCollision {
         { x, z: z - radius },
       ];
 
-      return samples.every((sample) => isWalkablePoint(maze, sample.x, sample.z, currentY));
+      return samples.every((sample) => isWalkablePoint(maze, towerWallPanels, sample.x, sample.z, currentY));
     },
     getGroundHeight(x, z, currentY) {
       if (isOnTowerTop(x, z, currentY)) {
@@ -135,6 +155,55 @@ export function createMazeCollision(maze: Maze): MazeCollision {
       return groundHeight;
     },
   };
+}
+
+export function createTowerWallPanels(): TowerWallPanel[] {
+  const panels: TowerWallPanel[] = [];
+  const apothem = TOWER_OUTER_RADIUS - TOWER_WALL_THICKNESS / 2;
+  const sideWidth = 2 * apothem * Math.tan(Math.PI / TOWER_WALL_SIDES) + 0.08;
+  const doorWidth = TOWER_DOOR_HALF_WIDTH * 2;
+  const doorPostWidth = Math.max(0.45, (sideWidth - doorWidth) / 2);
+  const windowWidth = TOWER_WINDOW_HALF_WIDTH * 2;
+  const windowPostWidth = Math.max(0.45, (sideWidth - windowWidth) / 2);
+
+  for (let index = 0; index < TOWER_WALL_SIDES; index += 1) {
+    const angle = (index / TOWER_WALL_SIDES) * Math.PI * 2;
+
+    if (isAngleWithin(angle, TOWER_DOOR_CENTER_ANGLE, 0.001)) {
+      addTowerPanel(panels, angle, 0, TOWER_DOOR_HEIGHT, doorPostWidth, -(doorWidth / 2 + doorPostWidth / 2), "door-left");
+      addTowerPanel(panels, angle, 0, TOWER_DOOR_HEIGHT, doorPostWidth, doorWidth / 2 + doorPostWidth / 2, "door-right");
+      addTowerPanel(panels, angle, TOWER_DOOR_HEIGHT, TOWER_TOTAL_HEIGHT, sideWidth, 0, "door-lintel-wall");
+      continue;
+    }
+
+    if (isAngleWithin(angle, TOWER_WINDOW_CENTER_ANGLE, 0.001)) {
+      addTowerPanel(panels, angle, 0, TOWER_WINDOW_FLOOR, sideWidth, 0, "window-lower-wall");
+      addTowerPanel(
+        panels,
+        angle,
+        TOWER_WINDOW_FLOOR,
+        TOWER_WINDOW_CEILING,
+        windowPostWidth,
+        -(windowWidth / 2 + windowPostWidth / 2),
+        "window-left",
+      );
+      addTowerPanel(
+        panels,
+        angle,
+        TOWER_WINDOW_FLOOR,
+        TOWER_WINDOW_CEILING,
+        windowPostWidth,
+        windowWidth / 2 + windowPostWidth / 2,
+        "window-right",
+      );
+      addTowerPanel(panels, angle, TOWER_WINDOW_CEILING, TOWER_TOTAL_HEIGHT, sideWidth, 0, "window-upper-wall");
+      continue;
+    }
+
+    addTowerPanel(panels, angle, 0, TOWER_TOTAL_HEIGHT, sideWidth, 0, `side-${index}`);
+  }
+
+  return panels;
 }
 
 export function createSpiralStairs(): StairStep[] {
@@ -208,22 +277,64 @@ export function isPointOnStep(x: number, z: number, step: StairStep): boolean {
   return Math.abs(localX) <= step.width / 2 && Math.abs(localZ) <= step.depth / 2;
 }
 
-function isWalkablePoint(maze: Maze, x: number, z: number, currentY: number): boolean {
+export function isPointInsideTowerWallPanel(panel: TowerWallPanel, x: number, z: number, y: number): boolean {
+  const epsilon = 0.000001;
+
+  if (y < panel.minY - epsilon || y > panel.maxY + epsilon) {
+    return false;
+  }
+
+  const dx = x - panel.x;
+  const dz = z - panel.z;
+  const cos = Math.cos(panel.yaw);
+  const sin = Math.sin(panel.yaw);
+  const localX = cos * dx + sin * dz;
+  const localZ = -sin * dx + cos * dz;
+
+  return Math.abs(localX) <= panel.width / 2 + epsilon && Math.abs(localZ) <= panel.depth / 2 + epsilon;
+}
+
+function isWalkablePoint(maze: Maze, towerWallPanels: TowerWallPanel[], x: number, z: number, currentY: number): boolean {
+  if (towerWallPanels.some((panel) => isPointInsideTowerWallPanel(panel, x, z, currentY))) {
+    return false;
+  }
+
   const distanceFromTower = Math.hypot(x, z);
   if (distanceFromTower < TOWER_OUTER_RADIUS + PLAYER_RADIUS) {
-    if (
-      distanceFromTower < TOWER_INNER_RADIUS - PLAYER_RADIUS ||
-      isInTowerDoorOpening(x, z, currentY) ||
-      isInTowerWindowOpening(x, z, currentY)
-    ) {
-      return true;
-    }
-
-    return false;
+    return true;
   }
 
   const cell = worldToCell(maze, x, z);
   return isOpenCell(maze, cell);
+}
+
+function addTowerPanel(
+  panels: TowerWallPanel[],
+  angle: number,
+  minY: number,
+  maxY: number,
+  width: number,
+  tangentOffset: number,
+  id: string,
+): void {
+  const apothem = TOWER_OUTER_RADIUS - TOWER_WALL_THICKNESS / 2;
+  const tangentX = Math.sin(angle);
+  const tangentZ = -Math.cos(angle);
+  const y = (minY + maxY) / 2;
+
+  panels.push({
+    id,
+    angle,
+    x: Math.cos(angle) * apothem + tangentX * tangentOffset,
+    z: Math.sin(angle) * apothem + tangentZ * tangentOffset,
+    y,
+    yaw: Math.PI / 2 - angle,
+    width,
+    height: maxY - minY,
+    depth: TOWER_WALL_THICKNESS,
+    minY,
+    maxY,
+  });
 }
 
 function isAngleWithin(angle: number, center: number, halfWidth: number): boolean {
